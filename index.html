@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grabador de Video con Cronómetro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 800px;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 2.2rem;
+        }
+        
+        .video-container {
+            position: relative;
+            margin: 20px auto;
+            width: 100%;
+            max-width: 600px;
+            height: 340px;
+            background: #000;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        
+        #videoPreview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+        
+        #noVideo {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: white;
+            font-size: 1.2rem;
+        }
+        
+        .timer-display {
+            font-size: 4rem;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 20px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 14px 28px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 160px;
+        }
+        
+        .btn-record {
+            background: linear-gradient(to right, #e74c3c, #c0392b);
+            color: white;
+        }
+        
+        .btn-timer {
+            background: linear-gradient(to right, #3498db, #2980b9);
+            color: white;
+        }
+        
+        .btn-stop {
+            background: linear-gradient(to right, #2ecc71, #27ae60);
+            color: white;
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: 600;
+            display: none;
+        }
+        
+        .recording {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .timing {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        
+        .completed {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .timer-display {
+                font-size: 3rem;
+            }
+            
+            button {
+                padding: 12px 20px;
+                min-width: 140px;
+                font-size: 1rem;
+            }
+            
+            .video-container {
+                height: 250px;
+            }
+        }
+        
+        @media (max-width: 400px) {
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            button {
+                width: 100%;
+                max-width: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Grabador de Video con Cronómetro</h1>
+        
+        <div class="video-container">
+            <video id="videoPreview" autoplay muted></video>
+            <div id="noVideo">Vista previa de la cámara</div>
+        </div>
+        
+        <div class="timer-display" id="timer">00:00:00</div>
+        
+        <div class="controls">
+            <button id="startRecordBtn" class="btn-record">Iniciar Grabación</button>
+            <button id="startTimerBtn" class="btn-timer" disabled>Iniciar Cronómetro</button>
+            <button id="stopBtn" class="btn-stop" disabled>Detener Todo</button>
+        </div>
+        
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        // Elementos del DOM
+        const videoPreview = document.getElementById('videoPreview');
+        const noVideo = document.getElementById('noVideo');
+        const timerDisplay = document.getElementById('timer');
+        const startRecordBtn = document.getElementById('startRecordBtn');
+        const startTimerBtn = document.getElementById('startTimerBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDiv = document.getElementById('status');
+        
+        // Variables globales
+        let mediaRecorder;
+        let recordedChunks = [];
+        let timerInterval;
+        let startTime;
+        let elapsedTime = 0;
+        let isRecording = false;
+        let isTiming = false;
+        
+        // Formatear tiempo en HH:MM:SS
+        function formatTime(seconds) {
+            const hrs = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        // Actualizar el cronómetro
+        function updateTimer() {
+            if (isTiming) {
+                const currentTime = Date.now();
+                elapsedTime = Math.floor((currentTime - startTime) / 1000);
+                timerDisplay.textContent = formatTime(elapsedTime);
+            }
+        }
+        
+        // Iniciar grabación
+        async function startRecording() {
+            try {
+                // Solicitar acceso a la cámara trasera
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: true
+                });
+                
+                videoPreview.srcObject = stream;
+                videoPreview.style.display = 'block';
+                noVideo.style.display = 'none';
+                
+                // Configurar MediaRecorder
+                mediaRecorder = new MediaRecorder(stream);
+                recordedChunks = [];
+                
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // Habilitar botones
+                startRecordBtn.disabled = true;
+                startTimerBtn.disabled = false;
+                stopBtn.disabled = false;
+                
+                // Mostrar estado
+                statusDiv.textContent = "Grabación iniciada";
+                statusDiv.className = "status recording";
+                statusDiv.style.display = "block";
+                
+            } catch (error) {
+                console.error("Error al acceder a la cámara:", error);
+                statusDiv.textContent = "Error: No se pudo acceder a la cámara";
+                statusDiv.className = "status recording";
+                statusDiv.style.display = "block";
+            }
+        }
+        
+        // Iniciar cronómetro
+        function startTimer() {
+            if (!isRecording) return;
+            
+            startTime = Date.now() - (elapsedTime * 1000);
+            isTiming = true;
+            
+            timerInterval = setInterval(updateTimer, 1000);
+            updateTimer();
+            
+            // Deshabilitar botón de inicio de cronómetro
+            startTimerBtn.disabled = true;
+            
+            // Mostrar estado
+            statusDiv.textContent = "Cronómetro en marcha";
+            statusDiv.className = "status timing";
+        }
+        
+        // Detener todo
+        function stopAll() {
+            if (isTiming) {
+                clearInterval(timerInterval);
+                isTiming = false;
+            }
+            
+            if (isRecording && mediaRecorder) {
+                // Detener grabación después de 2 segundos
+                setTimeout(() => {
+                    if (mediaRecorder.state !== "inactive") {
+                        mediaRecorder.stop();
+                    }
+                    
+                    // Detener todas las pistas del stream
+                    const stream = videoPreview.srcObject;
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                    }
+                    
+                    // Crear y descargar el archivo
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `grabacion_${formatTime(elapsedTime)}.webm`;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    }, 100);
+                    
+                    // Resetear estado
+                    isRecording = false;
+                    videoPreview.style.display = 'none';
+                    noVideo.style.display = 'flex';
+                    
+                    // Mostrar estado final
+                    statusDiv.textContent = `Grabación guardada (${formatTime(elapsedTime)})`;
+                    statusDiv.className = "status completed";
+                    
+                    // Reiniciar botones
+                    startRecordBtn.disabled = false;
+                    startTimerBtn.disabled = true;
+                    stopBtn.disabled = true;
+                    
+                }, 2000);
+                
+                // Actualizar estado inmediatamente
+                statusDiv.textContent = "Deteniendo... (2s para grabación)";
+                statusDiv.className = "status timing";
+            }
+        }
+        
+        // Event listeners
+        startRecordBtn.addEventListener('click', startRecording);
+        startTimerBtn.addEventListener('click', startTimer);
+        stopBtn.addEventListener('click', stopAll);
+        
+        // Manejo de errores de permisos
+        navigator.mediaDevices.enumerateDevices()
+            .then(devices => {
+                const hasCamera = devices.some(device => device.kind === 'videoinput');
+                if (!hasCamera) {
+                    statusDiv.textContent = "No se encontró una cámara en este dispositivo";
+                    statusDiv.className = "status recording";
+                    statusDiv.style.display = "block";
+                    startRecordBtn.disabled = true;
+                }
+            })
+            .catch(err => {
+                console.error("Error al enumerar dispositivos:", err);
+            });
+    </script>
+</body>
+</html>
+
